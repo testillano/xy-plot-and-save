@@ -36,6 +36,10 @@ if timeline_ticks < 1:
   print ("ERROR: invalid '--timeline-ticks'. Must be positive number !")
   sys.exit(1)
 
+if timeline_ticks > T_MAX:
+  print (f"ERROR: invalid '--timeline-ticks'. It must be less than or equal to the duration (<={T_MAX}) !")
+  sys.exit(1)
+
 DELTA = int(T_MAX/timeline_ticks)  # sample time (secs)
 times = np.arange(0, T_MAX + DELTA, DELTA)
 
