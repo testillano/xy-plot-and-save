@@ -14,7 +14,7 @@ parser.add_argument("--timeline-ticks", type=str, default=100, help="Number of t
 parser.add_argument("--max-rate", type=int, default=2000, help="Curve maximum rate value. Defaults to 2000")
 parser.add_argument("--min-rate", type=int, default=10, help="Minimum rate reference which helps to draw zero-rate points. Defaults to 10")
 parser.add_argument("--rate-module", type=int, default=1, help="Rate module to restrict y-axis resolution. Defaults to 1")
-parser.add_argument("--labels", type=str, help="Curve labels space-separated list. For example: script-001,script-002")
+parser.add_argument("--labels", type=str, help="Curve labels space-separated list. For example: test-001,test-002")
 parser.add_argument("--input", type=str, help="Input file basename to load (.txt and .pickle files are required). Restriction: must have same original timeline ticks")
 
 args = parser.parse_args()
@@ -204,7 +204,7 @@ else:
   ax.set_xlim(0, T_MAX)
   ax.set_ylim(0, Y_MAX)
   ax.set_xlabel("Timeline (s)")
-  ax.set_ylabel("Rate (scripts/s)")
+  ax.set_ylabel("Rate (cps)")
   lines = {tag: ax.plot([], [], lw=2, label=tag, color=colors(i), marker="o", linestyle='-')[0] for i, tag in enumerate(tags)}
 
 #debug()
