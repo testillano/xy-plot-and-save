@@ -32,11 +32,12 @@ if timeline_ticks < 1:
 
 DELTA = int(T_MAX/timeline_ticks)  # sample time (secs)
 times = np.arange(0, T_MAX + DELTA, DELTA)
-tags = args.labels.split(",")
-current_tag = tags[0]
-colors = plt.get_cmap("tab10", len(tags)) # tab10, viridis, etc.
-y_values = {tag: np.zeros_like(times, dtype=int) for tag in tags}
-painted = {tag: np.zeros_like(times, dtype=bool) for tag in tags} # to select painted points
+
+tags = []
+current_tag = None
+colors = None
+y_values = {}
+painted = {}
 drawing = False
 
 def debug():
@@ -115,7 +116,7 @@ def clear_plot(event):
 def change_series(label):
   global current_tag
   current_tag = label
-  print(f"Selected {current_tag}")
+  print(f"Selected '{current_tag}'")
 
 #############
 # EXECUTION #
@@ -175,6 +176,12 @@ else:
   if not args.labels:
     print("ERROR: --labels are mandatory when input file is not provided")
     sys.exit(1)
+
+  tags = args.labels.split(",")
+  current_tag = tags[0]
+  colors = plt.get_cmap("tab10", len(tags)) # tab10, viridis, etc.
+  y_values = {tag: np.zeros_like(times, dtype=int) for tag in tags}
+  painted = {tag: np.zeros_like(times, dtype=bool) for tag in tags} # to select painted points
 
   fig, ax = plt.subplots(figsize=(10, 10*Y_MAX/timeline_ticks)) #  inches (wide x height)
   ax.set_xlim(0, T_MAX)
