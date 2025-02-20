@@ -13,6 +13,7 @@ parser.add_argument("--duration", type=int, default=3600, help="Curve maximum ti
 parser.add_argument("--timeline-ticks", type=str, default=100, help="Number of ticks in timeline axis. Defaults to 100")
 parser.add_argument("--max-rate", type=int, default=2000, help="Curve maximum rate value. Defaults to 2000")
 parser.add_argument("--min-rate", type=int, default=10, help="Minimum rate reference which helps to draw zero-rate points. Defaults to 10")
+parser.add_argument("--rate-module", type=int, default=1, help="Rate module to restrict y-axis resolution. Defaults to 1")
 parser.add_argument("--labels", type=str, help="Curve labels space-separated list. For example: script-001,script-002")
 parser.add_argument("--input", type=str, help="Input file basename to load (.txt and .pickle files are required). Restriction: must have same original timeline ticks")
 
@@ -22,6 +23,11 @@ args = parser.parse_args()
 T_MAX = args.duration
 Y_MAX = args.max_rate
 T_MIN = args.min_rate
+rate_module = args.rate_module
+if rate_module < 1:
+  print ("ERROR: invalid '--rate-module'. Must be positive number !")
+  sys.exit(1)
+
 OUTPUT_FILEBN = args.output
 INPUT_FILEBN = args.input
 COL_SIZE = 20
@@ -62,6 +68,9 @@ def on_motion(event):
 def update_curve(event):
   if event.xdata is not None and event.ydata is not None:
     y_value = event.ydata
+
+    # Restrictions:
+    y_value = round(y_value/rate_module) * rate_module
     if y_value < T_MIN: y_value = 0 # zeroed reference
 
     index = int(event.xdata // DELTA)
@@ -112,6 +121,10 @@ def clear_plot(event):
     painted[tag][:] = False
     lines[tag].set_data([], [])
   fig.canvas.draw()
+
+def exit_program(event):
+  print("Goodbye !")
+  sys.exit(0)
 
 def change_series(label):
   global current_tag
@@ -199,16 +212,19 @@ fig.canvas.mpl_connect("button_press_event", on_press)
 fig.canvas.mpl_connect("button_release_event", on_release)
 fig.canvas.mpl_connect("motion_notify_event", on_motion)
 
-ax_button_generate = plt.axes([0.7, 0.05, 0.1, 0.075])
-ax_button_clear = plt.axes([0.81, 0.05, 0.1, 0.075])
+ax_button_generate = plt.axes([0.55, 0.05, 0.1, 0.075])
+ax_button_clear = plt.axes([0.67, 0.05, 0.1, 0.075])
+ax_button_exit = plt.axes([0.79, 0.05, 0.1, 0.075])
 ax_radio = plt.axes([0.01, 0.3, 0.1, 0.3])
 
 button_generate = Button(ax_button_generate, "Save")
 button_clear = Button(ax_button_clear, "Clean")
+button_exit = Button(ax_button_exit, "Exit")
 radio = RadioButtons(ax_radio, tags)
 
 button_generate.on_clicked(generate_list)
 button_clear.on_clicked(clear_plot)
+button_exit.on_clicked(exit_program)
 radio.on_clicked(change_series)
 
 plt.show()
