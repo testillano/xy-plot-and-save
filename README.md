@@ -19,3 +19,18 @@ $ pip3 install -r requirements.txt
 $ python3 plot.py --help
 ```
 
+# Using docker image
+
+## Build
+
+```bash
+$ docker build -t plot-app .
+```
+
+## Run 
+
+```bash
+$ xhost +local:docker
+$ docker run --rm -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v ${PWD}:/home plot-app --labels test1,test2
+```
+
