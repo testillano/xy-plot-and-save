@@ -30,7 +30,6 @@ if rate_module < 1:
 
 OUTPUT_FILEBN = args.output
 INPUT_FILEBN = args.input
-COL_SIZE = 20
 timeline_ticks = int(args.timeline_ticks)
 if timeline_ticks < 1:
   print ("ERROR: invalid '--timeline-ticks'. Must be positive number !")
@@ -94,10 +93,16 @@ def generate_list(event):
   with open(OUTPUT_FILEBN + '.pickle', 'wb') as f:
     pickle.dump(fig, f)
 
+  # Store plain text table file
   all_times = sorted(set(times[np.any(list(painted.values()), axis=0)]))
   header = ["Timeline(s)"] + tags
-  output_data = []
+  data2d = []
+  header_names_lengths = [2 + len(h) for h in header]
 
+  # Prepare headers:
+  header_ljust = [h.ljust(header_names_lengths[i]) for i, h in enumerate(header)]
+
+  # Prepare data:
   for t in all_times:
     row = [str(t)]
     for tag in tags:
@@ -106,15 +111,17 @@ def generate_list(event):
         row.append(str(y_values[tag][index]))
       else:
         row.append("-")
-    output_data.append(" ".join(row))
+    data2d.append(row)
+
+  rows_ljust = [
+    [data.ljust(header_names_lengths[i]) for i, data in enumerate(row)] for row in data2d
+  ]
 
   with open(OUTPUT_FILEBN + '.txt', "w") as f:
-    for data in header:
-      f.write(data.ljust(COL_SIZE))
+    f.write(" ".join(header_ljust))
     f.write("\n")
-    for data in output_data:
-      for w in data.split():
-        f.write(w.ljust(COL_SIZE))
+    for row in rows_ljust:
+      f.write(" ".join(row))
       f.write("\n")
 
   print(f"Saved '{OUTPUT_FILEBN}' .txt and .pickle' files")
@@ -216,15 +223,19 @@ fig.canvas.mpl_connect("button_press_event", on_press)
 fig.canvas.mpl_connect("button_release_event", on_release)
 fig.canvas.mpl_connect("motion_notify_event", on_motion)
 
-ax_button_generate = plt.axes([0.55, 0.05, 0.1, 0.075])
-ax_button_clear = plt.axes([0.67, 0.05, 0.1, 0.075])
-ax_button_exit = plt.axes([0.79, 0.05, 0.1, 0.075])
-ax_radio = plt.axes([0.01, 0.3, 0.1, 0.3])
+ax_button_generate = plt.axes([0.60, 0.08, 0.1, 0.075])
+ax_button_clear = plt.axes([0.72, 0.08, 0.1, 0.075])
+ax_button_exit = plt.axes([0.84, 0.08, 0.1, 0.075])
+ax_radio = plt.axes([0.01, 0.05, 0.5, 0.15])
 
 button_generate = Button(ax_button_generate, "Save")
 button_clear = Button(ax_button_clear, "Clean")
 button_exit = Button(ax_button_exit, "Exit")
+
+#max_tags_length = max(len(tag) for tag in tags)
 radio = RadioButtons(ax_radio, tags)
+#for r in radio.labels: r.set_fontsize(6)
+
 
 button_generate.on_clicked(generate_list)
 button_clear.on_clicked(clear_plot)
