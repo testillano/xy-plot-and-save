@@ -5,6 +5,7 @@ import pickle
 from matplotlib.widgets import Button, RadioButtons
 import argparse
 import sys, os
+#from screeninfo import get_monitors
 
 # Command-line arguments
 parser = argparse.ArgumentParser(description="Draw launcher rates in time")
@@ -53,6 +54,24 @@ def debug():
   print(f"times array: {times}")
   for k, v in painted.items(): print(f"painted dictionary:  {k}: {v}")
   for k, v in y_values.items(): print(f"y_values dictionary: {k}: {v}")
+
+## Function to avoid this error:
+##     ValueError: Image size of 1000x200000 pixels is too large. It must be less than 2^16 in each direction.
+##
+## Example: a, b = scale_dim(1000,200000, 65536)
+#def scale_dim(a, b, max_dim):
+#
+#    scale = min(max_dim / a, max_dim / b, 1.0)  # Solo escala si alguna excede el máximo
+#    new_a = int(a * scale)
+#    new_b = int(b * scale)
+#    if (scale != 1.0): print (f"WARNING: graph dimension has been scaled from {a} x {b} to {new_a} x {new_b}")
+#
+#    return new_a, new_b
+
+#def screen_size(percent = 0.9):
+#    monitor = get_monitors()[1]
+#    #print(str(monitor))
+#    return int(percent*monitor.width), int(percent*monitor.height)
 
 def on_press(event):
   global drawing
@@ -181,6 +200,7 @@ if INPUT_FILEBN: # from previous data:
       y_values[tag] = np.full(timeline_ticks + 1, 0) # initialize
       painted[tag] = np.zeros(timeline_ticks + 1, dtype=bool) # initialize
 
+      index = 0
       for i, row in df.iterrows():
         timeline_value = row['Timeline(s)']
         tag_value = row[tag]
@@ -207,7 +227,17 @@ else:
   y_values = {tag: np.zeros_like(times, dtype=int) for tag in tags}
   painted = {tag: np.zeros_like(times, dtype=bool) for tag in tags} # to select painted points
 
-  fig, ax = plt.subplots(figsize=(10, 10*Y_MAX/timeline_ticks)) #  inches (wide x height)
+  # Calculate figsize:
+  dpi = 100
+  #wide_px, height_px = scale_dim(10 * dpi, (10*Y_MAX/timeline_ticks)*dpi, 65535)
+  #wide_px, height_px = screen_size(0.3)
+  factor = 0.9
+  wide_px, height_px = factor*1280, factor*960
+
+  # To inches:
+  figsize = (wide_px / dpi, height_px / dpi)
+
+  fig, ax = plt.subplots(figsize=figsize, dpi=dpi) # inches (wide x height)
   ax.set_xlim(0, T_MAX)
   ax.set_ylim(0, Y_MAX)
   ax.set_xlabel("Timeline (s)")

@@ -18,7 +18,7 @@ WORKDIR /home
 COPY plot.py /app/plot.py
 
 # Instalar las dependencias de Python
-RUN pip install --no-cache-dir matplotlib PyQt5 numpy pandas
+RUN pip install --no-cache-dir matplotlib PyQt5 numpy pandas # screeninfo
 
 ENTRYPOINT ["python", "/app/plot.py"]
 CMD []
