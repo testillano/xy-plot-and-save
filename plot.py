@@ -8,25 +8,27 @@ import sys, os
 #from screeninfo import get_monitors
 
 # Command-line arguments
-parser = argparse.ArgumentParser(description="Draw launcher rates in time")
+parser = argparse.ArgumentParser(description="Plot xy curves (value over time)")
 parser.add_argument("--output", type=str, default="example", help="Output file basename to store data: plain text (<basename>.txt) and pickle serialization (<basename>.pickle). Defaults to 'example'")
 parser.add_argument("--duration", type=int, default=3600, help="Curve maximum time value in seconds. Defaults to 3600")
 parser.add_argument("--timeline-ticks", type=str, default=100, help="Number of ticks in timeline axis. Defaults to 100")
-parser.add_argument("--max-rate", type=int, default=2000, help="Curve maximum rate value. Defaults to 2000")
-parser.add_argument("--min-rate", type=int, default=10, help="Minimum rate reference which helps to draw zero-rate points. Defaults to 10")
-parser.add_argument("--rate-module", type=int, default=1, help="Rate module to restrict y-axis resolution. Defaults to 1")
+parser.add_argument("--max-value", type=int, default=2000, help="Maximum y-value. Defaults to 2000")
+parser.add_argument("--min-value", type=int, default=10, help="Minimum y-value reference which helps to draw zero-value points. Defaults to 10")
+parser.add_argument("--value-module", type=int, default=1, help="Value module to restrict y-axis resolution. Defaults to 1")
+parser.add_argument("--y-label", type=str, default="Value", help="Y-axis label. For example: 'Rate (cps)'")
 parser.add_argument("--labels", type=str, help="Curve labels space-separated list. For example: test-001,test-002")
 parser.add_argument("--input", type=str, help="Input file basename to load (.txt and .pickle files are required). Restriction: must have same original timeline ticks")
 
 args = parser.parse_args()
 
 # Parameters
+Y_LABEL = args.y_label
 T_MAX = args.duration
-Y_MAX = args.max_rate
-T_MIN = args.min_rate
-rate_module = args.rate_module
-if rate_module < 1:
-  print ("ERROR: invalid '--rate-module'. Must be positive number !")
+Y_MAX = args.max_value
+T_MIN = args.min_value
+value_module = args.value_module
+if value_module < 1:
+  print ("ERROR: invalid '--value-module'. Must be positive number !")
   sys.exit(1)
 
 OUTPUT_FILEBN = args.output
@@ -92,7 +94,7 @@ def update_curve(event):
     y_value = event.ydata
 
     # Restrictions:
-    y_value = round(y_value/rate_module) * rate_module
+    y_value = round(y_value/value_module) * value_module
     if y_value < T_MIN: y_value = 0 # zeroed reference
 
     index = int(event.xdata // DELTA)
@@ -218,7 +220,7 @@ if INPUT_FILEBN: # from previous data:
 
 else:
   if not args.labels:
-    print("ERROR: --labels are mandatory when input file is not provided")
+    print("ERROR: --labels is mandatory when input file is not provided")
     sys.exit(1)
 
   tags = args.labels.split(",")
@@ -241,7 +243,7 @@ else:
   ax.set_xlim(0, T_MAX)
   ax.set_ylim(0, Y_MAX)
   ax.set_xlabel("Timeline (s)")
-  ax.set_ylabel("Rate (cps)")
+  ax.set_ylabel(Y_LABEL)
   lines = {tag: ax.plot([], [], lw=2, label=tag, color=colors(i), marker="o", linestyle='-')[0] for i, tag in enumerate(tags)}
 
 #debug()

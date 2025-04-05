@@ -1,16 +1,16 @@
 # xy-plot-and-save
-Python plot & save utility in 2 dimensions (designed for rate-over-time line plots).
+Python plot & save utility in 2 dimensions (designed for value-over-time line plots).
 
 With this program, you can select and draw different curves and then save them to disk.
 
 You can also reload the graph from saved files to continue working.
 
-This is useful for designing rate curves that can be processed through administrative interfaces for agents such as [h2agent](https://github.com/testillano/h2agent).
+This is useful for designing traffic load profiles (`y-value = rate (cps)`) that can be processed through administrative interfaces for agents such as [h2agent](https://github.com/testillano/h2agent).
 
 # Requirements
 
 ```bash
-$ pip3 install -r requirements.txt 
+$ pip3 install -r requirements.txt
 ```
 
 # Usage
@@ -27,7 +27,7 @@ $ python3 plot.py --help
 $ docker build -t plot-app .
 ```
 
-## Run 
+## Run
 
 ```bash
 $ xhost +local:docker
