@@ -1,6 +1,6 @@
 FROM python:3.9-slim
 
-# Instalar dependencias del sistema necesarias
+# System libraries required by the Qt backend of matplotlib
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     libxext6 \
@@ -11,15 +11,14 @@ RUN apt-get update && apt-get install -y \
     libqt5core5a \
     && rm -rf /var/lib/apt/lists/*
 
-# Establecer el directorio de trabajo
+# Python dependencies (same pinned list as the native installation)
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Working directory: mount the host one here to load/save the session files
 WORKDIR /home
 
-# Copiar los archivos de la aplicación
 COPY plot.py /app/plot.py
-
-# Instalar las dependencias de Python
-RUN pip install --no-cache-dir matplotlib PyQt5 numpy pandas # screeninfo
 
 ENTRYPOINT ["python", "/app/plot.py"]
 CMD []
-

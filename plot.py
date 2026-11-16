@@ -1,278 +1,267 @@
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import pickle
-from matplotlib.widgets import Button, RadioButtons
 import argparse
-import sys, os
-#from screeninfo import get_monitors
+import json
+import sys
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.widgets import Button, RadioButtons
+
+TIMELINE_HEADER = "Timeline(s)"
+UNPAINTED = "-"
 
 # Command-line arguments
 parser = argparse.ArgumentParser(description="Plot xy curves (value over time)")
-parser.add_argument("--output", type=str, default="example", help="Output file basename to store data: plain text (<basename>.txt) and pickle serialization (<basename>.pickle). Defaults to 'example'")
+parser.add_argument("--output", type=str, default="example", help="Output file basename to store data: session (<basename>.json, reloadable with '--input') and plain text table (<basename>.txt). Defaults to 'example'")
+parser.add_argument("--input", type=str, help="Input file basename to load (<basename>.json, as saved). Its parameters (duration, timeline ticks, values range, y-label and labels) are used, so the corresponding options are ignored")
 parser.add_argument("--duration", type=int, default=3600, help="Curve maximum time value in seconds. Defaults to 3600")
-parser.add_argument("--timeline-ticks", type=str, default=100, help="Number of ticks in timeline axis. Defaults to 100")
+parser.add_argument("--timeline-ticks", type=int, default=100, help="Number of ticks in timeline axis. The duration must be a multiple of it. Defaults to 100")
 parser.add_argument("--max-value", type=int, default=2000, help="Maximum y-value. Defaults to 2000")
-parser.add_argument("--min-value", type=int, default=10, help="Minimum y-value reference which helps to draw zero-value points. Defaults to 10")
+parser.add_argument("--min-value", type=int, default=10, help="Minimum y-value reference which helps to draw zero-value points (lower values are zeroed). Defaults to 10")
 parser.add_argument("--value-module", type=int, default=1, help="Value module to restrict y-axis resolution. Defaults to 1")
 parser.add_argument("--y-label", type=str, default="Value", help="Y-axis label. For example: 'Rate (cps)'")
-parser.add_argument("--labels", type=str, help="Curve labels space-separated list. For example: test-001,test-002")
-parser.add_argument("--input", type=str, help="Input file basename to load (.txt and .pickle files are required). Restriction: must have same original timeline ticks")
+parser.add_argument("--labels", type=str, help="Curve labels comma-separated list (no spaces within a label). For example: test-001,test-002")
 
 args = parser.parse_args()
 
-# Parameters
-Y_LABEL = args.y_label
-T_MAX = args.duration
-Y_MAX = args.max_value
-T_MIN = args.min_value
-value_module = args.value_module
-if value_module < 1:
-  print ("ERROR: invalid '--value-module'. Must be positive number !")
+
+def fail(message):
+  print(f"ERROR: {message}")
   sys.exit(1)
+
+
+def validate_parameters(params):
+  """Checks the session parameters (from command line or input file)."""
+  if params["duration"] < 1:
+    fail("invalid duration. Must be positive number !")
+  if params["timelineTicks"] < 1:
+    fail("invalid timeline ticks. Must be positive number !")
+  if params["duration"] % params["timelineTicks"] != 0:
+    fail(f"invalid timeline ticks ({params['timelineTicks']}). The duration ({params['duration']}) must be a multiple of it !")
+  if params["maxValue"] < 1:
+    fail("invalid max value. Must be positive number !")
+  if params["minValue"] < 0 or params["minValue"] > params["maxValue"]:
+    fail(f"invalid min value. Must be in the range [0, {params['maxValue']}] !")
+  if params["valueModule"] < 1:
+    fail("invalid value module. Must be positive number !")
+
+
+def validate_labels(labels):
+  """Labels are columns of the whitespace-separated table: no empty, blank-containing or repeated ones."""
+  if not labels:
+    fail("no labels provided")
+  for label in labels:
+    if not label or any(c.isspace() for c in label):
+      fail(f"invalid label '{label}'. Must be non-empty and with no spaces !")
+    if label == TIMELINE_HEADER:
+      fail(f"invalid label '{label}'. It is reserved for the timeline column !")
+  if len(set(labels)) != len(labels):
+    fail(f"repeated labels in '{','.join(labels)}'")
+
+
+def load_session(basename):
+  """Returns the parameters, labels and values (None for unpainted points) saved by save_files()."""
+  path = basename + ".json"
+  try:
+    with open(path) as f:
+      session = json.load(f)
+    params = {k: int(session[k]) for k in ("duration", "timelineTicks", "maxValue", "minValue", "valueModule")}
+    params["yLabel"] = str(session["yLabel"])
+    series = [(str(s["label"]), list(s["values"])) for s in session["series"]]
+  except (OSError, ValueError, KeyError, TypeError) as e:
+    fail(f"reading input file '{path}' ({e})")
+
+  validate_parameters(params)
+  validate_labels([label for label, _ in series])
+  points = params["timelineTicks"] + 1
+  for label, values in series:
+    if len(values) != points:
+      fail(f"reading input file '{path}': '{label}' has {len(values)} values, {points} expected")
+    if any(v is not None and not isinstance(v, int) for v in values):
+      fail(f"reading input file '{path}': '{label}' has non-integer values")
+  return params, series
+
+
+#############
+# SESSION   #
+#############
+if args.input:
+  if args.labels:
+    print("WARNING: --labels will be ignored as input file basename is processed")
+  params, series = load_session(args.input)
+else:
+  if not args.labels:
+    fail("--labels is mandatory when input file is not provided")
+  params = {
+    "duration": args.duration,
+    "timelineTicks": args.timeline_ticks,
+    "maxValue": args.max_value,
+    "minValue": args.min_value,
+    "valueModule": args.value_module,
+    "yLabel": args.y_label,
+  }
+  validate_parameters(params)
+  labels = args.labels.split(",")
+  validate_labels(labels)
+  series = [(label, [None] * (params["timelineTicks"] + 1)) for label in labels]
 
 OUTPUT_FILEBN = args.output
-INPUT_FILEBN = args.input
-timeline_ticks = int(args.timeline_ticks)
-if timeline_ticks < 1:
-  print ("ERROR: invalid '--timeline-ticks'. Must be positive number !")
-  sys.exit(1)
+T_MAX = params["duration"]
+Y_MAX = params["maxValue"]
+T_MIN = params["minValue"]
+VALUE_MODULE = params["valueModule"]
+DELTA = T_MAX // params["timelineTicks"]  # sample time (secs), exact by validation
+times = np.arange(0, T_MAX + DELTA, DELTA)  # timelineTicks + 1 points, last one is the duration
 
-if timeline_ticks > T_MAX:
-  print (f"ERROR: invalid '--timeline-ticks'. It must be less than or equal to the duration (<={T_MAX}) !")
-  sys.exit(1)
-
-DELTA = int(T_MAX/timeline_ticks)  # sample time (secs)
-times = np.arange(0, T_MAX + DELTA, DELTA)
-
-tags = []
-current_tag = None
-colors = None
-y_values = {}
-painted = {}
+tags = [label for label, _ in series]
+y_values = {label: np.array([v or 0 for v in values], dtype=int) for label, values in series}
+painted = {label: np.array([v is not None for v in values], dtype=bool) for label, values in series}
+current_tag = tags[0]
 drawing = False
+last_point = None  # (index, value) of the previous point in a drag, to fill the skipped ones
 
-def debug():
-  print(f"times array: {times}")
-  for k, v in painted.items(): print(f"painted dictionary:  {k}: {v}")
-  for k, v in y_values.items(): print(f"y_values dictionary: {k}: {v}")
 
-## Function to avoid this error:
-##     ValueError: Image size of 1000x200000 pixels is too large. It must be less than 2^16 in each direction.
-##
-## Example: a, b = scale_dim(1000,200000, 65536)
-#def scale_dim(a, b, max_dim):
-#
-#    scale = min(max_dim / a, max_dim / b, 1.0)  # Solo escala si alguna excede el máximo
-#    new_a = int(a * scale)
-#    new_b = int(b * scale)
-#    if (scale != 1.0): print (f"WARNING: graph dimension has been scaled from {a} x {b} to {new_a} x {new_b}")
-#
-#    return new_a, new_b
+def quantize(y_value):
+  """Applies the y-axis restrictions: module resolution, zeroed reference and range."""
+  y_value = int(round(y_value / VALUE_MODULE) * VALUE_MODULE)
+  if y_value < T_MIN:
+    y_value = 0  # zeroed reference
+  return max(0, min(y_value, Y_MAX))
 
-#def screen_size(percent = 0.9):
-#    monitor = get_monitors()[1]
-#    #print(str(monitor))
-#    return int(percent*monitor.width), int(percent*monitor.height)
+
+def refresh_line(tag):
+  mask = painted[tag]
+  lines[tag].set_data(times[mask], y_values[tag][mask])
+
+
+def paint(event):
+  """Paints the point nearest to the event, and the ones skipped since the previous point of the drag."""
+  global last_point
+  if event.xdata is None or event.ydata is None:
+    return
+  index = int(round(event.xdata / DELTA))
+  if not 0 <= index < len(times):
+    return
+  value = float(event.ydata)
+
+  if last_point is None or last_point[0] == index:
+    points = [(index, value)]
+  else:
+    # Fast drags skip indexes: interpolate linearly from the previous point
+    prev_index, prev_value = last_point
+    step = 1 if index > prev_index else -1
+    span = index - prev_index
+    points = [(i, prev_value + (value - prev_value) * (i - prev_index) / span)
+              for i in range(prev_index + step, index + step, step)]
+
+  for i, v in points:
+    y_values[current_tag][i] = quantize(v)
+    painted[current_tag][i] = True
+  last_point = (index, value)
+  refresh_line(current_tag)
+  fig.canvas.draw_idle()
+
 
 def on_press(event):
-  global drawing
+  global drawing, last_point
   if event.inaxes == ax:
     drawing = True
-    #update_curve(event)
+    last_point = None
+    paint(event)  # a single click paints a point
+
 
 def on_release(event):
-  global drawing
+  global drawing, last_point
   drawing = False
+  last_point = None
+
 
 def on_motion(event):
   if drawing and event.inaxes == ax:
-    update_curve(event)
+    paint(event)
 
-def update_curve(event):
-  if event.xdata is not None and event.ydata is not None:
-    y_value = event.ydata
 
-    # Restrictions:
-    y_value = round(y_value/value_module) * value_module
-    if y_value < T_MIN: y_value = 0 # zeroed reference
-
-    index = int(event.xdata // DELTA)
-    if 0 <= index < len(times):
-      y_values[current_tag][index] = min(int(y_value), Y_MAX)
-      painted[current_tag][index] = True
-      visible_x = times[painted[current_tag]]
-      visible_y = y_values[current_tag][painted[current_tag]]
-      lines[current_tag].set_data(visible_x, visible_y)
-    fig.canvas.draw()
-
-def generate_list(event):
-
-  #debug()
-
-  # Store corresponding pickle file
-  with open(OUTPUT_FILEBN + '.pickle', 'wb') as f:
-    pickle.dump(fig, f)
-
-  # Store plain text table file
-  all_times = sorted(set(times[np.any(list(painted.values()), axis=0)]))
-  header = ["Timeline(s)"] + tags
-  data2d = []
-  header_names_lengths = [2 + len(h) for h in header]
-
-  # Prepare headers:
-  header_ljust = [h.ljust(header_names_lengths[i]) for i, h in enumerate(header)]
-
-  # Prepare data:
-  for t in all_times:
-    row = [str(t)]
-    for tag in tags:
-      index = np.where(times == t)[0][0] # time index is serie
-      if painted[tag][index]:
-        row.append(str(y_values[tag][index]))
-      else:
-        row.append("-")
-    data2d.append(row)
-
-  rows_ljust = [
-    [data.ljust(header_names_lengths[i]) for i, data in enumerate(row)] for row in data2d
+def save_files(event):
+  # Session file (reloadable):
+  session = dict(params)
+  session["series"] = [
+    {"label": tag, "values": [int(y_values[tag][i]) if painted[tag][i] else None for i in range(len(times))]}
+    for tag in tags
   ]
-
-  with open(OUTPUT_FILEBN + '.txt', "w") as f:
-    f.write(" ".join(header_ljust))
+  with open(OUTPUT_FILEBN + ".json", "w") as f:
+    json.dump(session, f, indent=2)
     f.write("\n")
-    for row in rows_ljust:
-      f.write(" ".join(row))
-      f.write("\n")
 
-  print(f"Saved '{OUTPUT_FILEBN}' .txt and .pickle' files")
+  # Plain text table file (painted times only):
+  header = [TIMELINE_HEADER] + tags
+  rows = []
+  for i in np.flatnonzero(np.any([painted[tag] for tag in tags], axis=0)):
+    rows.append([str(times[i])] + [str(y_values[tag][i]) if painted[tag][i] else UNPAINTED for tag in tags])
+  widths = [2 + max(len(row[c]) for row in [header] + rows) for c in range(len(header))]
+
+  with open(OUTPUT_FILEBN + ".txt", "w") as f:
+    for row in [header] + rows:
+      f.write(" ".join(cell.ljust(widths[c]) for c, cell in enumerate(row)).rstrip() + "\n")
+
+  print(f"Saved '{OUTPUT_FILEBN}.json' and '{OUTPUT_FILEBN}.txt' files")
+
 
 def clear_plot(event):
-  for tag in y_values:
+  for tag in tags:
     y_values[tag][:] = 0
     painted[tag][:] = False
-    lines[tag].set_data([], [])
-  fig.canvas.draw()
+    refresh_line(tag)
+  fig.canvas.draw_idle()
+
 
 def exit_program(event):
+  # Closing the figures makes plt.show() return: no SystemExit inside the GUI event loop
   print("Goodbye !")
-  sys.exit(0)
+  plt.close("all")
+
 
 def change_series(label):
   global current_tag
   current_tag = label
   print(f"Selected '{current_tag}'")
 
+
 #############
 # EXECUTION #
 #############
-# Create figure:
-fig, ax = None, None
-lines = {}
+dpi = 100
+factor = 0.9
+wide_px, height_px = factor * 1280, factor * 960
+fig, ax = plt.subplots(figsize=(wide_px / dpi, height_px / dpi), dpi=dpi)  # inches (wide x height)
+ax.set_xlim(0, T_MAX)
+ax.set_ylim(0, Y_MAX)
+ax.set_xlabel("Timeline (s)")
+ax.set_ylabel(params["yLabel"])
+colors = plt.get_cmap("tab10", len(tags))  # tab10, viridis, etc.
+lines = {tag: ax.plot([], [], lw=2, label=tag, color=colors(i), marker="o", linestyle="-")[0] for i, tag in enumerate(tags)}
+for tag in tags:
+  refresh_line(tag)
 
-if INPUT_FILEBN: # from previous data:
-
-  if args.labels:
-    print("WARNING: --labels will be ignored as input file basename is processed")
-
-  try:
-    # PICKLE FILE
-    with open(INPUT_FILEBN + '.pickle', 'rb') as f:
-      fig = pickle.load(f)
-      ax = fig.get_axes()[0]
-      lines = {line.get_label(): line for line in ax.lines}
-      legend = ax.get_legend()
-      tags = [label.get_text() for label in legend.get_texts()]
-      current_tag = tags[0]
-
-    # DATA FILE
-    df = pd.read_csv(INPUT_FILEBN + '.txt', sep=r'\s+', engine='python')  # Usamos sep='\s+' para manejar múltiples espacios
-
-    # Extract times:
-    #times = df.iloc[:, 0].to_numpy()  # first column as numpy array
-
-    # Read tags from file:
-    tags = list(df.columns[1:])
-
-    # Initialize dictionaries:
-    y_values = {}
-    painted = {}
-
-    for tag in tags:
-      y_values[tag] = np.full(timeline_ticks + 1, 0) # initialize
-      painted[tag] = np.zeros(timeline_ticks + 1, dtype=bool) # initialize
-
-      index = 0
-      for i, row in df.iterrows():
-        timeline_value = row['Timeline(s)']
-        tag_value = row[tag]
-
-        if tag_value != '-': # has value
-          index = np.where(times == timeline_value)[0][0] # time index is serie
-          y_values[tag][index] = int(tag_value)
-          painted[tag][index] = True
-
-        index = index + 1
-
-  except Exception as e:
-    print (f"ERROR: reading input files (.txt and/or .pickle) for basename '{INPUT_FILEBN}'  ({e})")
-    sys.exit(1)
-
-else:
-  if not args.labels:
-    print("ERROR: --labels is mandatory when input file is not provided")
-    sys.exit(1)
-
-  tags = args.labels.split(",")
-  current_tag = tags[0]
-  colors = plt.get_cmap("tab10", len(tags)) # tab10, viridis, etc.
-  y_values = {tag: np.zeros_like(times, dtype=int) for tag in tags}
-  painted = {tag: np.zeros_like(times, dtype=bool) for tag in tags} # to select painted points
-
-  # Calculate figsize:
-  dpi = 100
-  #wide_px, height_px = scale_dim(10 * dpi, (10*Y_MAX/timeline_ticks)*dpi, 65535)
-  #wide_px, height_px = screen_size(0.3)
-  factor = 0.9
-  wide_px, height_px = factor*1280, factor*960
-
-  # To inches:
-  figsize = (wide_px / dpi, height_px / dpi)
-
-  fig, ax = plt.subplots(figsize=figsize, dpi=dpi) # inches (wide x height)
-  ax.set_xlim(0, T_MAX)
-  ax.set_ylim(0, Y_MAX)
-  ax.set_xlabel("Timeline (s)")
-  ax.set_ylabel(Y_LABEL)
-  lines = {tag: ax.plot([], [], lw=2, label=tag, color=colors(i), marker="o", linestyle='-')[0] for i, tag in enumerate(tags)}
-
-#debug()
 plt.subplots_adjust(left=0.2, bottom=0.3)
 ax.legend()
-plt.grid(True)
+ax.grid(True)
 
 fig.canvas.mpl_connect("button_press_event", on_press)
 fig.canvas.mpl_connect("button_release_event", on_release)
 fig.canvas.mpl_connect("motion_notify_event", on_motion)
 
-ax_button_generate = plt.axes([0.60, 0.08, 0.1, 0.075])
+ax_button_save = plt.axes([0.60, 0.08, 0.1, 0.075])
 ax_button_clear = plt.axes([0.72, 0.08, 0.1, 0.075])
 ax_button_exit = plt.axes([0.84, 0.08, 0.1, 0.075])
 ax_radio = plt.axes([0.01, 0.05, 0.5, 0.15])
 
-button_generate = Button(ax_button_generate, "Save")
+button_save = Button(ax_button_save, "Save")
 button_clear = Button(ax_button_clear, "Clean")
 button_exit = Button(ax_button_exit, "Exit")
-
-#max_tags_length = max(len(tag) for tag in tags)
 radio = RadioButtons(ax_radio, tags)
-#for r in radio.labels: r.set_fontsize(6)
 
-
-button_generate.on_clicked(generate_list)
+button_save.on_clicked(save_files)
 button_clear.on_clicked(clear_plot)
 button_exit.on_clicked(exit_program)
 radio.on_clicked(change_series)
 
 plt.show()
-

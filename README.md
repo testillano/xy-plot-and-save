@@ -11,6 +11,13 @@ With this program, you can select and draw different curves and then save them t
 
 You can also reload the graph from saved files to continue working.
 
+The `Save` button writes two files (basename given by `--output`, `example` by default):
+
+* `<basename>.json`: the session (duration, timeline ticks, values range, y-axis label and the values of every curve). Load it with `--input <basename>` to continue working: its parameters are used, so there is no need to repeat them.
+* `<basename>.txt`: a plain text table with the painted times and the value of every curve (`-` where a curve has no point).
+
+Click to paint the point nearest to the pointer, or drag to paint a curve (fast drags are interpolated). Values are rounded to `--value-module`, and those below `--min-value` are zeroed.
+
 This is useful for designing traffic load profiles (`y-value = rate (cps)`) that can be processed through administrative interfaces for agents such as [h2agent](https://github.com/testillano/h2agent).
 
 # Requirements
